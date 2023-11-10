@@ -19,7 +19,7 @@ while flag == False:
             client_socket.close()
             flag = True
 
-        if message == 'arret' or reply == 'arret':
+        elif message == 'arret' or reply == 'arret':
             client_socket.close()
             flag = True 
 

@@ -1,0 +1,71 @@
+import socket
+import threading
+
+def main():
+    host = '127.0.0.1'
+    port = 1234
+    try:
+        client_socket = socket.socket()
+        client_socket.connect((host, port))
+
+        t1 = threading.Thread(target=reception, args=(client_socket,))
+        t1.start()
+        envoie(client_socket)
+
+    except ConnectionAbortedError:
+        print('La connexion a été coupée')
+    except ConnectionRefusedError:
+        print('La connexion a été refusée')
+    except ConnectionResetError:
+        print('La connexion a été réinitialisée')
+    finally:
+        client_socket.close()
+
+def reception(client_socket):
+    flag = False
+    while not flag:
+        try:
+            reply = client_socket.recv(1024).decode()
+            print(reply)
+            if reply == 'bye':
+                flag = True
+                
+            if reply == "arret":
+                client_socket.close()
+                flag = True
+                
+        except ConnectionAbortedError:
+            print('La connexion a été coupée')
+            break
+        except ConnectionResetError:
+            print('La connexion a été réinitialisée')
+            break
+
+    print('Fermeture de la connexion côté client')
+    
+    
+
+def envoie(client_socket):
+    flag = False
+    while not flag:
+        message = input('Message = ')
+        try:
+            client_socket.send(message.encode())
+            print(message)
+            if message == 'bye':
+                flag = True
+        except ConnectionAbortedError:
+            print('La connexion a été coupée')
+            break
+        except ConnectionResetError:
+            print('La connexion a été réinitialisée')
+            break
+        except OSError:
+            print('vous avez bien été deconnecté')
+            break
+
+    print('Fermeture de la connexion côté client')
+
+if __name__ == '__main__':
+    main()
+

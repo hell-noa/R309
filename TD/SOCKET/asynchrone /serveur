@@ -1,0 +1,100 @@
+import socket
+import threading 
+
+
+def main():
+    port = 1234
+    try:
+        reply = ""
+        message = ""
+        global server_socket
+        server_socket = socket.socket()
+        server_socket.bind(('0.0.0.0', port))
+        server_socket.listen(5)
+        global serv_start
+        serv_start = True
+        while serv_start == True:
+            conn, address = server_socket.accept()
+            print ('nouvelle connection')
+            reply = ""
+            message = ""
+            t1= threading.Thread(target= reception, args= (conn,))
+            t1.start()
+            envoie(conn)
+                    
+                    
+    except ConnectionAbortedError:
+        print ('la connexion a été coupé')
+    except ConnectionRefusedError:
+        print('la connexion a été  refusé')
+    except ConnectionResetError:
+        print('la connexion a été réinitialisé')
+    except OSError:
+        pass
+                
+    else:
+        if message == "arret":
+            server_socket.close()
+
+            
+        
+
+def reception(conn):
+    global flag, serv_start
+    flag = False
+    while flag== False:
+        try:
+            message = conn.recv(1024).decode()
+            print(message)
+            if message == 'arret':
+                flag = True
+                serv_start = False
+                server_socket.close()
+                
+                
+            elif message == 'bye':
+                conn.close()
+                flag = True
+                
+                
+        except ConnectionAbortedError:
+            print ('la connexion a été coupé')
+        except ConnectionRefusedError:
+            print('la connexion a été  refusé')
+        except ConnectionResetError:
+            print('la connexion a été réinitialisé')
+        except OSError:
+            pass
+        
+        else:
+            pass        
+
+            
+def envoie(conn):
+    global flag, serv_start
+    flag =False
+    while flag == False:
+        reply = input ('reply = ')
+        try:
+            conn.send(reply.encode())
+            print (reply)
+            if reply == "arret":
+                flag = True
+                serv_start = False
+                server_socket.close()
+                
+        except ConnectionAbortedError:
+            print ('la connexion a été coupé')
+        except ConnectionRefusedError:
+            print('la connexion a été  refusé')
+        except ConnectionResetError:
+            print('la connexion a été réinitialisé')
+        except OSError:
+            pass
+        
+        else:
+            print('')
+                
+
+if __name__ =='__main__':
+    main()

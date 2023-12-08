@@ -1,0 +1,171 @@
+import socket
+import threading
+from concurrent.futures import ThreadPoolExecutor
+import mysql.connector
+
+mysql_host = "127.0.0.1"
+mysql_user = "root"
+mysql_password = "P@ssw0rd"
+mysql_database = "sae309"
+
+first_connection = True
+
+
+def receive_data(conn):
+    data = b""
+    while True:
+        chunk = conn.recv(1024)
+        if not chunk:
+            break
+        data += chunk
+        if b"\0" in chunk:
+            break
+    return data.decode().rstrip('\0')
+
+
+def authentification_serveur(conn):
+    try:
+        db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM serveur')
+        serveur_info = cursor.fetchone()
+
+        if serveur_info is None:
+            print('La table est vide veuillez remplir les informations demandées')
+            new_log = input('Nouvel indentifiant pour le serveur : ')
+            new_mdp = input('Nouveau mot de passe pour le serveur : ')
+
+            cursor.execute("INSERT INTO serveur (login , mdp) VALUES (%s, %s)", (new_log, new_mdp))
+            db.commit()
+            print("Informations du serveur ajoutées avec succès.")
+            conn.send("Informations du serveur ajoutées avec succès.".encode())
+            return True
+
+        log = receive_data(conn)
+        mdp = receive_data(conn)
+
+        if log == serveur_info[0] and mdp == serveur_info[1]:
+            conn.send('ok'.encode())
+            return True
+
+        else:
+            conn.send("INVALID".encode())
+            return False
+
+    except Exception as e:
+        print(f"Erreur lors de l'authentification du serveur : {e}")
+        conn.send("ERROR".encode())
+        return False
+
+    finally:
+        db.close()
+        
+
+#def authentification_user(conn):
+ #   try:
+  #      db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
+   #     cursor = db.cursor()
+    #    cursor.execute('SELECT * FROM user')
+     #   info_user = cursor.fetchone()
+        
+      #  if info_user is None:
+       #     print('la table est vide veuillez vous inscrire')
+       #     new_log = input('veuillez entrer votre identifiant : ')
+        #    new_mdp = input('veuillez entrer votre mot de passe : ')
+         #  time = "CURRENT_TIMESTAMP"
+          #  cursor.execute("INSERT INTO user (pseudo , mdp, date_de_creation) VALUES (%s, %s, %s)", (new_log, new_mdp, time))
+            
+        
+
+        
+
+
+def main():
+    port = 1234
+    try:
+        global server_socket
+        server_socket = socket.socket()
+        server_socket.bind(('0.0.0.0', port))
+        server_socket.listen(5)
+        global serv_start
+        serv_start = True
+
+        global clients
+        clients = []  
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            while serv_start:
+                conn, address = server_socket.accept()
+                print('Nouvelle connexion')
+                clients.append(conn)  
+                executor.submit(handle_client, conn)
+
+    except ConnectionAbortedError:
+        print('La connexion a été coupée')
+    except ConnectionRefusedError:
+        print('La connexion a été refusée')
+    except ConnectionResetError:
+        print('La connexion a été réinitialisée')
+    except OSError:
+        pass
+    else:
+        server_socket.close()
+
+
+def handle_client(conn):
+    global first_connection
+    try:
+        global flag, serv_start
+        flag = False
+        while not flag:
+            received_message = conn.recv(1024).decode()
+            print(f"Reçu du client : {received_message}")
+
+            if received_message == 'arret':
+                flag = True
+                serv_start = False
+                server_socket.close()
+            elif received_message == 'bye':
+                conn.close()
+                clients.remove(conn)  
+                flag = True
+
+            elif not received_message:
+                conn.close()
+                clients.remove(conn)  
+                flag = True
+
+            elif first_connection:
+                authenticated = authentification_serveur(conn)
+                if not authenticated:
+                    conn.close()
+                    clients.remove(conn) 
+                    flag = True
+                else:
+                    first_connection = False
+                    broadcast("Serveur authentifié.", conn)
+
+            else:
+                broadcast(received_message, conn)
+
+    except ConnectionAbortedError:
+        print('La connexion a été coupée')
+    except ConnectionResetError:
+        print('La connexion a été réinitialisée')
+    finally:
+        conn.close()
+
+
+def broadcast(message, sender_conn):
+    for client_conn in clients:
+        if client_conn != sender_conn:
+            try:
+                client_conn.send(message.encode())
+            except Exception as e:
+                print(f"Erreur lors de l'envoi au client : {e}")
+                pass
+
+
+if __name__ == '__main__':
+    main()
+

@@ -11,24 +11,29 @@ mysql_database = "sae309"
 first_connection = True
 
 
-def receive_data(conn):
-    data = b""
-    while True:
-        chunk = conn.recv(1024)
-        if not chunk:
-            break
-        data += chunk
-        if b"\0" in chunk:
-            break
-    return data.decode().rstrip('\0')
+#def receive_data(conn):
+ #   data = b""
+  #  while True:
+   #     chunk = conn.recv(1024)
+    #    if not chunk:
+     #       break
+    #    data += chunk
+   #     if b"\0" in chunk:
+  #          print(5)
+ #           break
+#    return data.decode().rstrip('\0')
 
 
 def authentification_serveur(conn):
+    print(9)
     try:
+        print(10)
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
         cursor = db.cursor()
         cursor.execute('SELECT * FROM serveur')
         serveur_info = cursor.fetchone()
+        print(11)
+        
 
         if serveur_info is None:
             print('La table est vide veuillez remplir les informations demandées')
@@ -41,14 +46,14 @@ def authentification_serveur(conn):
             conn.send("Informations du serveur ajoutées avec succès.".encode())
             return True
 
-        log = receive_data(conn)
-        mdp = receive_data(conn)
 
-        if log == serveur_info[0] and mdp == serveur_info[1]:
+        elif log == serveur_info[1] and mdp == serveur_info[2]:
+            print(12)
             conn.send('ok'.encode())
             return True
 
         else:
+            print(13)
             conn.send("INVALID".encode())
             return False
 
@@ -131,17 +136,22 @@ def handle_client(conn):
                 flag = True
 
             elif not received_message:
+                print(4)
                 conn.close()
                 clients.remove(conn)  
                 flag = True
 
             elif first_connection:
+                print(5)
                 authenticated = authentification_serveur(conn)
+                print(8)
                 if not authenticated:
+                    print(6)
                     conn.close()
                     clients.remove(conn) 
                     flag = True
                 else:
+                    print(7)
                     first_connection = False
                     broadcast("Serveur authentifié.", conn)
 
@@ -168,4 +178,3 @@ def broadcast(message, sender_conn):
 
 if __name__ == '__main__':
     main()
-

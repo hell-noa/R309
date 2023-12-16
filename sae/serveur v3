@@ -1,0 +1,213 @@
+import socket
+import threading
+from concurrent.futures import ThreadPoolExecutor
+import mysql.connector
+import datetime, time
+
+mysql_host = "127.0.0.1"
+mysql_user = "root"
+mysql_password = "P@ssw0rd"
+mysql_database = "sae309"
+
+
+
+
+def authentification_serveur(conn):
+    print(9)
+    try:
+        print(10)
+        db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM serveur')
+        serveur_info = cursor.fetchone()
+        print(11)
+        
+
+        if serveur_info is None:
+            print('La table est vide veuillez remplir les informations demandées')
+            new_log = input('Nouvel indentifiant pour le serveur : ')
+            new_mdp = input('Nouveau mot de passe pour le serveur : ')
+
+            cursor.execute("INSERT INTO serveur (login , mdp) VALUES (%s, %s)", (new_log, new_mdp))
+            db.commit()
+            print("Informations du serveur ajoutées avec succès.")
+            conn.send("Informations du serveur ajoutées avec succès.".encode())
+            return True
+
+
+        else:
+            log = input('identifiant admin : ')
+            mdp = input('identifiant admin : ')
+            if log == serveur_info[1] and mdp == serveur_info[2]:
+                print(12)
+                conn.send('ok'.encode())
+                return True
+
+
+
+    except Exception as e:
+        print(f"Erreur lors de l'authentification du serveur : {e}")
+        conn.send("ERROR".encode())
+        return False
+
+    finally:
+        db.close()
+        
+
+def authentification_user(conn):
+    try:
+        db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
+        cursor = db.cursor()
+        query='SELECT * FROM user where pseudo = %s and mdp = %s'
+        
+        info_user = conn.recv(1024).decode()
+        info_user = info_user.split("/")
+        if info_user[0] == "LOGIN":
+            identifiant = info_user[1].split(',')
+            cursor.execute(query,(identifiant[0] , identifiant[1]))
+            resultat = cursor.fetchone()
+            
+            if resultat is None:
+                   print('connexion refusé')
+                   
+            elif resultat:
+               print('connexion accepté')
+               message = 'ACCEPT' 
+               conn.send(message.encode())
+               
+        
+            else:
+               print('connexion refusé ')
+            
+           
+           
+    except ConnectionAbortedError:
+        print('La connexion a été coupée')
+    except ConnectionRefusedError:
+        print('La connexion a été refusée')
+    except ConnectionResetError:
+        print('La connexion a été réinitialisée')
+    except OSError:
+        pass
+        
+    else:
+        pass
+           
+           
+def inscription(conn, message):
+    try:
+        print('icicicicici')
+        db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
+        cursor = db.cursor()
+        
+        info_user = message
+        info_user = info_user.split("/")
+        if info_user[0] == "INSCRI":
+            print(5768)
+            identifiant = info_user[1].split(',')
+            print(identifiant)
+            new_log = identifiant[0]
+            print(identifiant[0])
+            new_mdp = identifiant[1]
+            print(identifiant[1])
+            #time = datetime.fromtimestamp(time.time())
+    
+            cursor.execute("INSERT INTO user (pseudo , mdp) VALUES (%s, %s)", (new_log, new_mdp))
+            db.commit()
+            print('transaction effectué')
+
+    except:
+        pass
+    else:
+        pass
+
+
+    
+
+
+def main():
+    port = 1234
+    try:
+        global server_socket
+        server_socket = socket.socket()
+        server_socket.bind(('0.0.0.0', port))
+        server_socket.listen(5)
+        global serv_start
+        serv_start = True
+
+        global clients
+        clients = []  
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            while serv_start:
+                conn, address = server_socket.accept()
+                authentification_user(conn)
+                print('Nouvelle connexion')
+                clients.append(conn)  
+                executor.submit(handle_client, conn)
+
+    except ConnectionAbortedError:
+        print('La connexion a été coupée')
+    except ConnectionRefusedError:
+        print('La connexion a été refusée')
+    except ConnectionResetError:
+        print('La connexion a été réinitialisée')
+    except OSError:
+        pass
+    else:
+        server_socket.close()
+
+
+def handle_client(conn):
+    try:
+        global flag, serv_start
+        flag = False
+        while not flag:
+            received_message = conn.recv(1024).decode()
+            print(f"Reçu du client : {received_message}")
+
+                
+            if received_message == 'bye':
+                conn.close()
+                clients.remove(conn)  
+                flag = True
+
+            elif not received_message:
+                print(4)
+                conn.close()
+                clients.remove(conn)  
+                flag = True
+                
+            elif received_message.startswith("INSCRI/"):
+                print(88888)
+                inscription(conn, received_message)
+            
+            elif received_message.startswith("LOGIN/"):
+                authentification_user(conn)
+                
+
+
+
+            else:
+                broadcast(received_message, conn)
+
+    except ConnectionAbortedError:
+        print('La connexion a été coupée')
+    except ConnectionResetError:
+        print('La connexion a été réinitialisée')
+    finally:
+        conn.close()
+
+
+def broadcast(message, sender_conn):
+    for client_conn in clients:
+        if client_conn != sender_conn:
+            try:
+                client_conn.send(message.encode())
+            except Exception as e:
+                print(f"Erreur lors de l'envoi au client : {e}")
+                pass
+
+
+if __name__ == '__main__':
+    main()

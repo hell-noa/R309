@@ -1,0 +1,229 @@
+import sys
+import socket
+import threading
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+
+flag = False
+chat_window = None
+show = False
+
+host = '127.0.0.1'
+port = 1234
+
+global client_socket
+client_socket = socket.socket()
+
+# Classe pour émettre un signal entre les threads
+class MessageSignal(QObject):
+    message_received = pyqtSignal(str)
+
+# Ajoutez la classe Inscription
+class Inscription(QWidget):
+    # Ajoutez un signal pour la fermeture de la fenêtre
+    close_window_signal = pyqtSignal()
+    # Ajoutez un signal pour afficher le message d'erreur d'alias déjà utilisé
+    alias_error_signal = pyqtSignal()
+    
+    def __init__(self, chat_window):
+        super().__init__()
+        self.chat_window = chat_window
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle('Page d\'Inscription')
+        self.resize(500, 300)
+
+        self.login = QLabel("nom d'utilisateur :")
+        self.mdp = QLabel("mot de passe :")
+        self.alias = QLabel("alias unique :")
+        self.username_input = QLineEdit(self)
+        self.password_input = QLineEdit(self)
+        self.alias_input = QLineEdit(self)
+        self.send_button = QPushButton('envoi :')
+        self.send_button.clicked.connect(self.inscription)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.login)
+        layout.addWidget(self.username_input)
+        layout.addWidget(self.mdp)
+        layout.addWidget(self.password_input)
+        layout.addWidget(self.alias)
+        layout.addWidget(self.alias_input)
+        layout.addWidget(self.send_button)
+
+        self.setLayout(layout)
+        
+        # Connecter le signal alias_error_signal à la méthode show_alias_error
+        self.alias_error_signal.connect(self.show_alias_error)
+
+    def inscription(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        alias = self.alias_input.text()
+        client_socket.send(f"INSCRI/{username},{password},{alias}".encode())
+
+    def closeEvent(self, event):
+        # Émettre le signal pour fermer la fenêtre d'inscription
+        self.close_window_signal.emit()
+        event.accept()
+
+    # Ajoutez la méthode pour afficher le message d'erreur d'alias déjà utilisé
+    def show_alias_error(self):
+        QMessageBox.critical(self, "Erreur d'alias", "Cet alias est déjà utilisé. Veuillez en choisir un autre.")
+
+class Connexion(QWidget):
+    def __init__(self, message_signal):
+        super().__init__()
+        self.message_signal = message_signal
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle('Page de Connexion')
+        self.resize(300, 150)
+
+        self.username_input = QLineEdit(self)
+        self.password_input = QLineEdit(self)
+
+        login_button = QPushButton('Se connecter', self)
+        login_button.clicked.connect(self.authenticate)
+
+        inscri_button = QPushButton("S'inscrire", self)
+        inscri_button.clicked.connect(self.show_inscription_window)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.username_input)
+        layout.addWidget(self.password_input)
+        layout.addWidget(login_button)
+        layout.addWidget(inscri_button)
+
+        self.setLayout(layout)
+
+    def authenticate(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        client_socket.send(f"LOGIN/{username},{password}".encode())
+
+    def show_inscription_window(self):
+        # Utiliser self.inscription_window pour garder une référence à la fenêtre d'inscription
+        self.inscription_window = Inscription(chat_window)
+        # Connecter le signal de fermeture de la fenêtre à la méthode d'ouverture
+        self.inscription_window.close_window_signal.connect(self.show)
+        self.inscription_window.show()
+
+class ChatWindow(QWidget):
+    def __init__(self, client_socket, message_signal, connexion_window):
+        super().__init__()
+        self.client_socket = client_socket
+        self.message_signal = message_signal
+        self.connexion_window = connexion_window
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle('Chat')
+        self.resize(800, 600)
+        self.text_edit = QTextEdit()
+        self.input_line = QLineEdit()
+        self.send_button = QPushButton('envoi')
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.text_edit)
+
+        input_layout = QHBoxLayout()
+        input_layout.addWidget(self.input_line)
+        input_layout.addWidget(self.send_button)
+
+        layout.addLayout(input_layout)
+        self.setLayout(layout)
+
+        self.send_button.clicked.connect(self.send_message)
+
+        try:
+            self.client_socket.connect((host, port))
+            t1 = threading.Thread(target=self.reception)
+            t1.start()
+        except ConnectionAbortedError:
+            print('La connexion a été coupée')
+            fermeture()
+
+    def send_message(self):
+        message = self.input_line.text()
+        if message:
+            try:
+                self.client_socket.send(message.encode())
+                print(f"{message}")
+                self.text_edit.append(f"moi: {message}")
+                self.input_line.clear()
+                if message == 'bye':
+                    sys.exit()
+            except ConnectionAbortedError:
+                print('La connexion a été coupée')
+                fermeture()
+            except ConnectionResetError:
+                print('La connexion a été réinitialisée')
+                fermeture()
+            except OSError:
+                print('Vous avez bien été déconnecté')
+                fermeture()
+
+    def reception(self):
+        global flag
+        while not flag:
+            try:
+                print("j'attends un message : ")
+                reply = client_socket.recv(1024).decode()
+                print(reply)
+                # Utiliser invokeMethod pour mettre à jour l'interface utilisateur dans le thread principal
+                QMetaObject.invokeMethod(self, 'update_text_edit', Qt.QueuedConnection, Q_ARG(str, reply))
+                if reply == 'bye':
+                    fermeture()
+                    
+                elif reply == "ACCEPT":
+                    QTimer.singleShot(0, self.show_chat)
+                    
+                elif reply == "insertion_ok":
+                    QTimer.singleShot(0, self.close_inscription_window)
+                    
+                elif reply == "insertion_no":
+                    # Émettre le signal pour afficher le message d'erreur d'alias déjà utilisé
+                    self.connexion_window.inscription_window.alias_error_signal.emit()
+                    
+            except ConnectionAbortedError:
+                print('La connexion a été coupée')
+                fermeture()
+            except ConnectionResetError:
+                print('La connexion a été réinitialisée')
+                fermeture()
+
+        else:
+            print('Fermeture de la connexion côté client')
+
+    def show_chat(self):
+        self.connexion_window.hide()
+        self.show()
+
+    @pyqtSlot(str)
+    def update_text_edit(self, message):
+        self.text_edit.append(message)
+
+    def close_inscription_window(self):
+        # Fermer la fenêtre d'inscription lorsque le signal est reçu
+        self.connexion_window.inscription_window.close()
+
+def fermeture():
+    global flag
+    print('Fermeture demandée')
+    flag = True
+
+if __name__ == '__main__':
+    try:
+        app = QApplication(sys.argv)
+        message_signal = MessageSignal()
+        connexion_window = Connexion(message_signal)
+        chat_window = ChatWindow(client_socket, message_signal, connexion_window)
+        connexion_window.show()
+        sys.exit(app.exec_())
+
+    finally:
+        pass
+

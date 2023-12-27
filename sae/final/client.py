@@ -305,7 +305,6 @@ class ChatWindow(QWidget):
         if message:
             try:
                 self.client_socket.send(f"MESSAGE/{current_channel}/{self.username},{message}".encode())
-                print(f"{message}")
                 self.text_edits[current_channel].append(f"moi: {message}")
                 self.input_line.clear()
                 if message == 'bye':
@@ -328,10 +327,7 @@ class ChatWindow(QWidget):
         global flag, current_channel
         while not flag:
             try:
-                print("j'attends un message : ")
                 reply = client_socket.recv(1024).decode()
-                print(reply)
-                # Utiliser invokeMethod pour mettre à jour l'interface utilisateur dans le thread principal
                 if reply.startswith('MESSAGE/'):
                     messages = reply.split('/')
                     channel = messages[1]
@@ -340,7 +336,6 @@ class ChatWindow(QWidget):
                     message_content = user_and_message[1]
 
                     if channel == current_channel:
-                        print(1)
                         QMetaObject.invokeMethod(self, 'update_text_edit', Qt.QueuedConnection,
                                                  Q_ARG(str, reply), Q_ARG(str, channel), Q_ARG(str, username),
                                                  Q_ARG(str, message_content))
@@ -355,11 +350,9 @@ class ChatWindow(QWidget):
                     QTimer.singleShot(0, self.close_inscription_window)
 
                 elif reply == "insertion_no":
-                    # Émettre le signal pour afficher le message d'erreur d'alias déjà utilisé
                     self.connexion_window.inscription_window.alias_error_signal.emit()
 
                 elif reply.startswith("ACCES/"):
-                    print(reply)
                     self.verif_channel(reply)
 
             except ConnectionAbortedError:
@@ -383,25 +376,18 @@ class ChatWindow(QWidget):
         channels = ["Générale", "Blabla", "Informatique", "Marketing", "Comptabilité"]
         global current_channel
         new_channel = channels[index - 1]
-        print(f'ici      {self.allowed_channels}')
 
-        # Vérifier si le nouveau canal est autorisé
         if new_channel in self.allowed_channels:
-            # Cachez tous les QTextEdit
             for text_edit in self.text_edits.values():
                 text_edit.hide()
 
-            # Changer le canal actuel seulement si le nouveau canal est autorisé
             current_channel = new_channel
 
-            # Affichez le QTextEdit correspondant au channel sélectionné
             if current_channel in self.text_edits:
                 self.text_edits[current_channel].show()
         else:
-            # Le nouveau canal n'est pas autorisé, affichez un message d'erreur
             QMessageBox.warning(self, "Accès refusé",
                                 f"Vous n'avez pas accès au canal {new_channel}")
-            # Rétablissez la sélection précédente dans le QComboBox
             self.qcombo.setCurrentIndex(channels.index(current_channel) + 1)
 
 
@@ -414,7 +400,6 @@ class ChatWindow(QWidget):
         """
         try:
             permissions = reply.split('/')[1]
-            print(permissions)
             correspondances = {'G': 'Générale', 'B': 'Blabla', 'I': 'Informatique', 'M': 'Marketing', 'C': 'Comptabilité'}
 
             self.allowed_channels = [correspondances[letter] for letter in permissions]
@@ -484,7 +469,6 @@ class ChatWindow(QWidget):
         :param requested_channel: Canal pour lequel l'accès est demandé.
         :type requested_channel: str
         """
-        print(self.username)
         self.client_socket.send(f"DEMANDE/{requested_channel}/{self.username}".encode())
 
 
@@ -524,7 +508,6 @@ if __name__ == '__main__':
         connexion_window = Connexion(message_signal)
         chat_window = ChatWindow(client_socket, message_signal, connexion_window)
 
-        # Connecter le signal d'authentification réussie à la méthode set_username dans ChatWindow
         connexion_window.auth_success_signal.connect(chat_window.set_username)
 
         connexion_window.show()

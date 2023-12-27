@@ -2,48 +2,42 @@ import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import mysql.connector
-import datetime, time
 
 mysql_host = "127.0.0.1"
 mysql_user = "root"
 mysql_password = "P@ssw0rd"
 mysql_database = "sae309"
 
-
-
-
 def authentification_serveur(conn):
-    print(9)
+    """
+    Gère les informaions admin du serveur grace a la table 'serveur' de la base de données MySQL.
+    Si la table est vide, elle demande à l'utilisateur d'ajouter des informations sur le serveur.
+
+    :param conn: Objet de connexion socket avec le serveur
+    :type conn: socket.socket
+    :return: True si l'authentification est réussie, False sinon
+    :rtype: str
+    """
     try:
-        print(10)
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
         cursor = db.cursor()
         cursor.execute('SELECT * FROM serveur')
         serveur_info = cursor.fetchone()
-        print(11)
-        
 
         if serveur_info is None:
-            print('La table est vide veuillez remplir les informations demandées')
-            new_log = input('Nouvel indentifiant pour le serveur : ')
+            new_log = input('Nouvel identifiant pour le serveur : ')
             new_mdp = input('Nouveau mot de passe pour le serveur : ')
 
             cursor.execute("INSERT INTO serveur (login , mdp) VALUES (%s, %s)", (new_log, new_mdp))
             db.commit()
-            print("Informations du serveur ajoutées avec succès.")
             conn.send("Informations du serveur ajoutées avec succès.".encode())
             return True
-
-
         else:
-            log = input('identifiant admin : ')
-            mdp = input('identifiant admin : ')
+            log = input('Identifiant admin : ')
+            mdp = input('Mot de passe admin : ')
             if log == serveur_info[1] and mdp == serveur_info[2]:
-                print(12)
                 conn.send('ok'.encode())
                 return True
-
-
 
     except Exception as e:
         print(f"Erreur lors de l'authentification du serveur : {e}")
@@ -52,174 +46,159 @@ def authentification_serveur(conn):
 
     finally:
         db.close()
-        
 
 def authentification_user(conn):
+    """
+    Gère l'authentification des utilisateurs avec une base de données MySQL.
+
+    :param conn: Objet de connexion socket avec le client
+    :type conn: socket.socket
+    """
     try:
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
         cursor = db.cursor()
-        query='SELECT * FROM user where pseudo = %s and mdp = %s'
-        
+        query = 'SELECT * FROM user where pseudo = %s and mdp = %s'
+
         message = conn.recv(1024).decode()
         info_user = message.split("/")
+        
         if info_user[0] == "LOGIN":
             identifiant = info_user[1].split(',')
-            cursor.execute(query,(identifiant[0] , identifiant[1]))
+            cursor.execute(query, (identifiant[0], identifiant[1]))
             resultat = cursor.fetchone()
             
             if resultat is None:
-                   print('connexion refusé')
+                print('Connexion refusée')
                    
             elif resultat:
-               print('connexion accepté')
-               message = 'ACCEPT' 
-               conn.send(message.encode())
-               
-        
+                print('Connexion acceptée')
+                message = 'ACCEPT'
+                conn.send(message.encode())
+                
             else:
-               print('connexion refusé ')
-            
-           
-           
-    except ConnectionAbortedError:
-        print('La connexion a été coupée')
-    except ConnectionRefusedError:
-        print('La connexion a été refusée')
-    except ConnectionResetError:
-        print('La connexion a été réinitialisée')
-    except OSError:
-        pass
-        
-    else:
-        pass
-    
+                print('Connexion refusée')
+
+    except (ConnectionAbortedError, ConnectionRefusedError, ConnectionResetError, OSError) as e:
+        print(f"Erreur de connexion : {e}")
+
     finally:
         db.close()
-        channel_verif(conn,identifiant[0])
-           
-           
+        channel_verif(conn, identifiant[0])
+
 def inscription(conn, message):
+    """
+    Gère le processus d'inscription des utilisateurs en ajoutant de nouveaux utilisateurs à la base de données.
+
+    :param conn: Objet de connexion socket avec le client
+    :type conn: socket.socket
+    :param message: Message reçu du client contenant les informations d'inscription
+    :type message: str
+    """
     try:
-        print('icicicicici')
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
         cursor = db.cursor()
-        
-        info_user = message
-        info_user = info_user.split("/")
+
+        info_user = message.split("/")
         if info_user[0] == "INSCRI":
-            print(5768)
             identifiant = info_user[1].split(',')
             new_log = identifiant[0]
             new_mdp = identifiant[1]
             new_alias = identifiant[2]
-            
+
             cursor.execute("SELECT * FROM user WHERE alias = %s", (new_alias,))
             result = cursor.fetchone()
-            
-            if result :
+
+            if result:
                 message = 'insertion_no'
                 conn.send(message.encode())
-                print('insertion_no')
-                
-    
+                print('Insertion échouée')
+
             else:
                 cursor.execute("INSERT INTO user (pseudo , mdp, alias) VALUES (%s, %s, %s)", (new_log, new_mdp, new_alias))
                 db.commit()
-                print('transaction effectué')
-                message = 'insertion_ok' 
+                print('Transaction effectuée')
+                message = 'insertion_ok'
                 conn.send(message.encode())
-            
-            
-            
 
-    except:
-        pass
-    else:
-        pass
-    
+    except Exception as e:
+        print(f"Erreur lors de l'inscription : {e}")
+
     finally:
         db.close()
-        
-        
+
 def channel_verif(conn, pseudo):
+    """
+    Vérifie les autorisations d'accès aux canaux pour un utilisateur spécifique.
+
+    :param conn: Objet de connexion socket avec le client
+    :type conn: socket.socket
+    :param pseudo: Pseudo de l'utilisateur
+    :type pseudo: str
+    """
     try:
-        print('channel veirf')
-        print(pseudo)
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
         cursor = db.cursor()
-        cursor.execute("select channel_verif from user where pseudo = %s",(pseudo,))
+        cursor.execute("SELECT channel_verif FROM user WHERE pseudo = %s", (pseudo,))
         result = cursor.fetchone()
-        correspondances = {'1': 'GB', '2': 'GI', '3': 'GM', '4': 'GC', '12': 'GBI', '13': 'GBM', '14': 'GBC', '23': 'GIM', '24': 'GIC', '34': 'GMC', '123': 'GBIM', '124': 'GBIC', '134': 'GBMC','234':'GIMC' ,'1234': 'GBIMC'}
+        correspondances = {'1': 'GB', '2': 'GI', '3': 'GM', '4': 'GC', '12': 'GBI', '13': 'GBM', '14': 'GBC', '23': 'GIM',
+                           '24': 'GIC', '34': 'GMC', '123': 'GBIM', '124': 'GBIC', '134': 'GBMC', '234': 'GIMC',
+                           '1234': 'GBIMC'}
 
-        print(correspondances.get(result[0]))
-        
         conn.send(f"ACCES/{correspondances.get(result[0], 'G')}".encode())
-        
-        
+
     except Exception as e:
         print(f"Erreur : {e}")
 
     finally:
         db.close()
 
-    
-        
 def channel_acces(conn, message):
+    """
+    Gère les demandes d'accès aux canaux et met à jour les autorisations dans la base de données.
+
+    :param conn: Objet de connexion socket avec le client
+    :type conn: socket.socket
+    :param message: Message reçu du client contenant la demande d'accès à un canal
+    :type message: str
+    """
     try:
-        print(1)
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
-        print(2)
         cursor = db.cursor()
-        print(3)
-        info_user = message
-        print(4)
-        info_user = info_user.split("/")
-        print(5)
+
+        info_user = message.split("/")
         pseudo = info_user[2]
-        print(6)
-        cursor.execute("select channel_verif from user where pseudo = %s",(pseudo,))
-        print(7)
+        cursor.execute("SELECT channel_verif FROM user WHERE pseudo = %s", (pseudo,))
         current_channel_verif = cursor.fetchone()
-        print(current_channel_verif)
-        
+
         if current_channel_verif is not None and current_channel_verif[0] is not None:
             current_channel_verif = int(current_channel_verif[0])
         else:
             current_channel_verif = ""
-            
-            
 
         if info_user[0] == "DEMANDE":
             if info_user[1] == "Blabla":
-                variable = str(current_channel_verif) + str (1)
+                variable = str(current_channel_verif) + str(1)
                 cursor.execute("UPDATE user SET channel_verif = %s WHERE pseudo = %s", (variable, pseudo))
                 db.commit()
-
-                
-                
 
             elif info_user[1] == "Informatique":
                 verif = input('YES/NO : ')
                 if verif.lower() == 'yes':
-                    variable = str(current_channel_verif) +str(2)
+                    variable = str(current_channel_verif) + str(2)
                     cursor.execute("UPDATE user SET channel_verif = %s WHERE pseudo = %s", (variable, pseudo))
                     db.commit()
                 else:
-                   pass
-                    
-                                       
+                    pass
+
             elif info_user[1] == "Marketing":
-                print(11)
                 verif = input('YES/NO : ')
                 if verif.lower() == 'yes':
-                    variable = str(current_channel_verif) +str( 3)
-                    print(variable)
+                    variable = str(current_channel_verif) + str(3)
                     cursor.execute("UPDATE user SET channel_verif = %s WHERE pseudo = %s", (variable, pseudo))
                     db.commit()
                 else:
-                   pass
-                    
-                    
+                    pass
+
             elif info_user[1] == "Comptabilité":
                 verif = input('YES/NO : ')
                 if verif.lower() == 'yes':
@@ -228,106 +207,89 @@ def channel_acces(conn, message):
                     db.commit()
                 else:
                     pass
-                
+
     except Exception as e:
-        pass
-    
+        print(f"Erreur : {e}")
+
     else:
         pass
 
     finally:
         db.close()
-        tri(conn,pseudo)
+        tri(conn, pseudo)
 
-        
-                    
-                    
-                    
 def tri(conn, pseudo):
+    """
+    Trie les autorisations d'accès aux canaux pour un utilisateur spécifique.
+
+    :param conn: Objet de connexion socket avec le client
+    :type conn: socket.socket
+    :param pseudo: Pseudo de l'utilisateur
+    :type pseudo: str
+    """
     try:
-        print('TRI')
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
-        print('TRI2')
         cursor = db.cursor()
         cursor.execute("SELECT channel_verif FROM user WHERE pseudo = %s", (pseudo,))
-        print('TRI3')
         resultat = cursor.fetchone()
-        print(resultat)
         if resultat:
-            # Accéder directement à l'élément de la tuple
             verif = ''.join(sorted(resultat[0]))
-            print(verif)
             cursor.execute("UPDATE user SET channel_verif = %s WHERE pseudo = %s", (verif, pseudo))
-            print('sardine')
             db.commit()
             db.close()
 
-
-    except:
-        pass
+    except Exception as e:
+        print(f"Erreur : {e}")
 
     finally:
         channel_verif(conn, pseudo)
-        
-        
-        
 
-        
-        
-        
 def save_message(conn, message):
+    """
+    Enregistre les messages dans la base de données et les diffuse aux autres clients connectés.
+
+    :param conn: Objet de connexion socket avec le client
+    :type conn: socket.socket
+    :param message: Message reçu du client contenant le message à enregistrer
+    :type message: str
+    """
     try:
-        print(1)
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
         cursor = db.cursor()
         info_user = message
         info_user = info_user.split("/")
 
-        
         if info_user[0] == "MESSAGE":
-            print(2)
             information = info_user[2].split(',')
-            print(3)
             user = information[0]
-            print(4)
-            print (user)
             contenu = information[1]
-            print (contenu)
-            print(5)
             channel = info_user[1]
-            print(6)
-            
-            cursor.execute("SELECT id_user from user WHERE pseudo = %s" ,(user,))
+
+            cursor.execute("SELECT id_user from user WHERE pseudo = %s", (user,))
             user = cursor.fetchone()[0]
-            print ( user)
-            print('okok')
-            
-            cursor.execute("SELECT channel_id from channel WHERE nom_channel = %s" ,(channel,))
+
+            cursor.execute("SELECT channel_id from channel WHERE nom_channel = %s", (channel,))
             channel = cursor.fetchone()[0]
-            print(channel)
-            print('okokok')
-            
-            cursor.execute("INSERT INTO message (contenu , id_user, channel_id) VALUES (%s, %s, %s)", (contenu, user, channel))
+
+            cursor.execute("INSERT INTO message (contenu , id_user, channel_id) VALUES (%s, %s, %s)",
+                           (contenu, user, channel))
 
             db.commit()
-            print('okokokok')
-            
             broadcast(message, conn)
-            
-    except:
+
+    except Exception as e:
         pass
+
     else:
         pass
+
     finally:
         db.close()
-        
-    
-
-
-    
-
 
 def main():
+    """
+    Fonction principale du serveur de chat.
+    """
     port = 1234
     try:
         global server_socket
@@ -338,29 +300,29 @@ def main():
         serv_start = True
 
         global clients
-        clients = []  
+        clients = []
 
         with ThreadPoolExecutor(max_workers=5) as executor:
             while serv_start:
                 conn, address = server_socket.accept()
                 authentification_user(conn)
                 print('Nouvelle connexion')
-                clients.append(conn)  
+                clients.append(conn)
                 executor.submit(handle_client, conn)
 
-    except ConnectionAbortedError:
-        print('La connexion a été coupée')
-    except ConnectionRefusedError:
-        print('La connexion a été refusée')
-    except ConnectionResetError:
-        print('La connexion a été réinitialisée')
-    except OSError:
-        pass
+    except (ConnectionAbortedError, ConnectionRefusedError, ConnectionResetError, OSError) as e:
+        print(f"Erreur lors du lancement du serveur : {e}")
+
     else:
         server_socket.close()
 
-
 def handle_client(conn):
+    """
+    Gère la connexion avec un client.
+
+    :param conn: Objet de connexion socket avec le client
+    :type conn: socket.socket
+    """
     try:
         global flag, serv_start
         flag = False
@@ -368,51 +330,47 @@ def handle_client(conn):
             received_message = conn.recv(1024).decode()
             print(f"Reçu du client : {received_message}")
 
-                
             if received_message == 'bye':
                 conn.close()
-                clients.remove(conn)  
+                clients.remove(conn)
                 flag = True
 
             elif not received_message:
-                print(4)
                 conn.close()
-                clients.remove(conn)  
+                clients.remove(conn)
                 flag = True
-                
+
             elif received_message.startswith("INSCRI/"):
-                print (received_message)
                 inscription(conn, received_message)
-            
+
             elif received_message.startswith("LOGIN/"):
-                print (received_message)
-                authentification_user(conn)
-                
+                authentification_user(conn, received_message)
+
             elif received_message.startswith("MESSAGE/"):
-                print(99999)
                 save_message(conn, received_message)
-                
+
             elif received_message.startswith("DEMANDE/"):
-                print('ouiouioui')
                 channel_acces(conn, received_message)
-                    
-
-                
-
-
 
             else:
                 broadcast(received_message, conn)
 
-    except ConnectionAbortedError:
-        print('La connexion a été coupée')
-    except ConnectionResetError:
-        print('La connexion a été réinitialisée')
+    except (ConnectionAbortedError, ConnectionResetError) as e:
+        print(f"Erreur lors de la gestion du client : {e}")
+
     finally:
         conn.close()
 
 
 def broadcast(message, sender_conn):
+    """
+    Diffuse un message à tous les clients connectés.
+
+    :param message: Message à diffuser
+    :type message: str
+    :param sender_conn: Connexion socket du client émetteur
+    :type sender_conn: socket.socket
+    """
     try:
         print("dans le broadcast")
         db = mysql.connector.connect(host=mysql_host, user=mysql_user, password=mysql_password, database=mysql_database)
@@ -423,13 +381,11 @@ def broadcast(message, sender_conn):
             info_messages = info_message[2].split(",")
             content = info_messages[1]
             sender_username = info_messages[0]
-            print(content)
-            print(sender_username)
+
 
             for client_conn in clients:
                 if client_conn != sender_conn:
                     try:
-                        # Modifiez l'en-tête du message pour inclure le nom du canal
                         message_with_channel = f"MESSAGE/{channel_name}/{sender_username},{content}"
                         client_conn.send(message_with_channel.encode())
                     except Exception as e:

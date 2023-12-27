@@ -472,9 +472,9 @@ class ChatWindow(QWidget):
         """
         Affiche la fenêtre de demande d'accès.
         """
-         self.demande_acces_window = DemandeAccesWindow(["Générale", "Blabla", "Informatique", "Marketing", "Comptabilité"])
-         self.demande_acces_window.access_requested_signal.connect(self.process_access_request)
-         self.demande_acces_window.show()
+        self.demande_acces_window = DemandeAccesWindow(["Générale", "Blabla", "Informatique", "Marketing", "Comptabilité"])
+        self.demande_acces_window.access_requested_signal.connect(self.process_access_request)
+        self.demande_acces_window.show()
 
 
     def process_access_request(self, requested_channel):

@@ -3,10 +3,11 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import mysql.connector
 
-mysql_host = "127.0.0.1"
-mysql_user = "root"
-mysql_password = "P@ssw0rd"
-mysql_database = "sae309"
+#entrez vos informations MySQL
+mysql_host = ""
+mysql_user = ""
+mysql_password = ""
+mysql_database = ""
 
 def authentification_serveur(conn):
     """
